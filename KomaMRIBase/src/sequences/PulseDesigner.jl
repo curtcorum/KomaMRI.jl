@@ -378,10 +378,17 @@ julia> seq = PulseDesigner.RF_sinc(sys.B1, durRF, sys);
 julia> plot_seq(seq)
 ```
 """
-function RF_HSn(B1, T, sys::Scanner; G=[0, 0, 0], Δf=0, a=0.46, TBP=4)
+function RF_HSn(B1, T, sys::Scanner; G=[0, 0, 0], Δf=0, n=1, trunc=.46, TBP=10)
 	t0 = T / TBP
 	ζ = maximum(abs.(G)) / sys.Smax
-	sinc_pulse(t) = B1 * sinc(t/t0) .* ((1-a) + a*cos((2π*t)/(TBP*t0)))
+	
+	#sinc_pulse(t) = B1 * sinc(t/t0) .* ((1-a) + a*cos((2π*t)/(TBP*t0)))
+	sinc_pulse(t) = B1 * sinc(t/t0) .* ((1-trunc) + a*cos((2π*t)/(TBP*t0)))
+	
+	#beta = asech( trunc)
+	#sinc_pulse(t) = sech( beta * ( (2*t/T-1) .^ order_n));
+	
+	
     gr1 = [Grad(G[1], T, ζ); Grad(G[2], T, ζ); Grad(G[3], T, ζ)]
     gr2 = [Grad(-G[1], (T-ζ)/2, ζ); Grad(-G[2], (T-ζ)/2, ζ); Grad(-G[3], (T-ζ)/2, ζ)]
     gr = [gr1 gr2]
