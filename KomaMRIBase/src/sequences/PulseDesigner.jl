@@ -346,5 +346,53 @@ function EPI_example(; sys=Scanner())
 end
 
 
+"""
+	seq = RF_HSn(B1, T, sys; G=[0, 0, 0], Δf=0, n=1, TBP=4)
+
+Returns a sequence with an adiabatic stretched hyperbolic secant pulse of order n (HSn) RF waveform.
+
+# References
+Djaudat Idiyatullin, Curt Corum, Steen Moeller, Michael Garwood,
+Gapped pulses for frequency-swept MRI, 2008, 
+https://doi.org/10.1016/j.jmr.2008.05.009.
+(https://www.sciencedirect.com/science/article/pii/S1090780708001651)
+
+# Arguments
+- `B1`: (`::Number`, `[T]`) RF amplitude
+- `T`: (`::Real`, `[s]`) RF duration
+- `sys`: (`::Scanner`) Scanner struct
+
+# Keywords
+- `G`: (`::Vector{Real}`, `=[0, 0, 0]`, `[T/m]`) gradient amplitudes for x, y, z
+- `Δf`: (`::Real`, `=0`, `[Hz]`) RF pulse carrier frequency displacement
+- `n`: (`::Integer`, `=1`) HSn order 'n'
+- `trunc`: (`::Real`, `=.001`) truncation factor
+- `TBP`: (`::Real`, `=10`) Time-Bandwidth product parameter
+
+# Returns
+- `seq`: (`::Sequence`) Sequence struct with a HSn RF pulse
+
+# Examples
+```julia-repl
+julia> sys = Scanner(); durRF = π / 2 / (2π * γ * sys.B1);
+
+julia> seq = PulseDesigner.RF_sinc(sys.B1, durRF, sys);
+
+julia> plot_seq(seq)
+```
+"""
+function RF_HSn(B1, T, sys::Scanner; G=[0, 0, 0], Δf=0, a=0.46, TBP=4)
+	t0 = T / TBP
+	ζ = maximum(abs.(G)) / sys.Smax
+	sinc_pulse(t) = B1 * sinc(t/t0) .* ((1-a) + a*cos((2π*t)/(TBP*t0)))
+    gr1 = [Grad(G[1], T, ζ); Grad(G[2], T, ζ); Grad(G[3], T, ζ)]
+    gr2 = [Grad(-G[1], (T-ζ)/2, ζ); Grad(-G[2], (T-ζ)/2, ζ); Grad(-G[3], (T-ζ)/2, ζ)]
+    gr = [gr1 gr2]
+    rf = [RF(t->sinc_pulse(t - T/2), T; delay=ζ, Δf) RF(0,0)]
+	return Sequence(gr, rf)
+end
+
+
+
 export EPI, radial_base, EPI_example
 end
