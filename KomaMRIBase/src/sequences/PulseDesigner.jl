@@ -352,7 +352,7 @@ end
 Returns a sequence with an adiabatic stretched hyperbolic secant pulse of order n (HSn) RF waveform.
 
 # References
-Djaudat Idiyatullin, Curt Corum, Steen Moeller, Michael Garwood,
+- Djaudat Idiyatullin, Curt Corum, Steen Moeller, Michael Garwood,
 Gapped pulses for frequency-swept MRI, 2008, 
 https://doi.org/10.1016/j.jmr.2008.05.009.
 (https://www.sciencedirect.com/science/article/pii/S1090780708001651)
