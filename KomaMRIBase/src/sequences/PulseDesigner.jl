@@ -304,7 +304,7 @@ function spiral_base(
 		R = reshape([RF(0,0)], 1, 1)
 		Nadc = floor(Int64, ta*BW)
 		A = [ADC(Nadc,ta)]
-		seq = Sequence(GR,R,A)
+		seq = Sequence(GR,R,A)RF(
 		seq.DEF = Dict("Nx"=>N,"Ny"=>N,"Nz"=>1,"Δθ"=>Δθ,"Nint"=>Nint,"Name"=>"spiral","FOV"=>[FOV, FOV, 0], "λ"=>λ)
 		return seq
 	end
@@ -378,24 +378,40 @@ julia> seq = PulseDesigner.RF_sinc(sys.B1, durRF, sys);
 julia> plot_seq(seq)
 ```
 """
-function RF_HSn(B1, T, sys::Scanner; G=[0, 0, 0], Δf=0, n=1, trunc=.46, TBP=10)
-	t0 = T / TBP
-	ζ = maximum(abs.(G)) / sys.Smax
-	
-	#sinc_pulse(t) = B1 * sinc(t/t0) .* ((1-a) + a*cos((2π*t)/(TBP*t0)))
-	sinc_pulse(t) = B1 * sinc(t/t0) .* ((1-trunc) + a*cos((2π*t)/(TBP*t0)))
-	
-	#beta = asech( trunc)
-	#sinc_pulse(t) = sech( beta * ( (2*t/T-1) .^ order_n));
-	
-	
+function RF_HSn(B1, T, sys::Scanner; G=[0, 0, 0], Δf=0, n=1, trunc=.001, TBP=10)
+    t0 = T / TBP
+    ζ = maximum(abs.(G)) / sys.Smax
+
+    #sinc_pulse(t) = B1 * sinc(t/t0) .* ((1-a) + a*cos((2π*t)/(TBP*t0)))
+    #sinc_pulse(t) = B1 * sinc(t/t0) .* ((1-trunc) + trunc*cos((2π*t)/(TBP*t0)))
+
+    beta = asech( trunc)
+    AM(t) = B1*sech( beta * ( (2*t/T) .^ n));
+    HSn_pulse(t) = AM(t)
+
+    
+    # NEED TO CONTROL OWN TIMING BASED on sys.RF_delta
+    # modulation
+    #FM(t) = cumsum( sys.RF_delta(t)*AM(t) .* AM(t));
+    #FM(t) = FM/FM(end); # normalize
+    #FM(t) = bw*(FM(t)-0.5); # center and scale
+
+    #phi = 2*pi*cumsum( dt * FM); % integrate to get phase
+    #phi = circshift( phi, 1); % match AM alignment
+
+
+    # combine envelope and phase to get complex pulse
+    #pulse = AM .* exp( i*phi);
+    #pulse = AM .* AM .^((order_n-1)/14).* exp( i*phi); % smooth out bat ears, /16 for HS8
+    #pulse = AM .* sqrt( sqrt( AM)) .* exp( i*phi); % smooth out bat ears
+
+
     gr1 = [Grad(G[1], T, ζ); Grad(G[2], T, ζ); Grad(G[3], T, ζ)]
     gr2 = [Grad(-G[1], (T-ζ)/2, ζ); Grad(-G[2], (T-ζ)/2, ζ); Grad(-G[3], (T-ζ)/2, ζ)]
     gr = [gr1 gr2]
-    rf = [RF(t->sinc_pulse(t - T/2), T; delay=ζ, Δf) RF(0,0)]
-	return Sequence(gr, rf)
+    rf = [RF(t->HSn_pulse(t - T/2), T; delay=ζ, Δf) RF(0,0)]
+    return Sequence(gr, rf)
 end
-
 
 
 export EPI, radial_base, EPI_example
