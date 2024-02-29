@@ -304,7 +304,7 @@ function spiral_base(
 		R = reshape([RF(0,0)], 1, 1)
 		Nadc = floor(Int64, ta*BW)
 		A = [ADC(Nadc,ta)]
-		seq = Sequence(GR,R,A)RF(
+		seq = Sequence(GR,R,A)
 		seq.DEF = Dict("Nx"=>N,"Ny"=>N,"Nz"=>1,"Δθ"=>Δθ,"Nint"=>Nint,"Name"=>"spiral","FOV"=>[FOV, FOV, 0], "λ"=>λ)
 		return seq
 	end
@@ -346,6 +346,8 @@ function EPI_example(; sys=Scanner())
 end
 
 
+# WORKING BELOW CAC 230228 *************************************************************************
+
 """
 	seq = RF_HSn(B1, T, sys; G=[0, 0, 0], Δf=0, n=1, TBP=4)
 
@@ -360,11 +362,11 @@ Returns a sequence with an adiabatic stretched hyperbolic secant pulse of order 
 - `sys`: (`::Scanner`) Scanner struct
 
 # Keywords
-- `G`: (`::Vector{Real}`, `=[0, 0, 0]`, `[T/m]`) gradient amplitudes for x, y, z
-- `Δf`: (`::Real`, `=0`, `[Hz]`) RF pulse carrier frequency displacement
+- `G`: (`::Vector{Real}`, `=[0.0, 0.0, 0.0]`, `[T/m]`) gradient amplitudes for x, y, z
+- `Δf`: (`::Real`, `=0.0`, `[Hz]`) RF pulse carrier frequency displacement *** Not Yet Implemented ***
 - `n`: (`::Integer`, `=1`) HSn order 'n'
-- `trunc`: (`::Real`, `=.001`) truncation factor
-- `TBP`: (`::Real`, `=10`) Time-Bandwidth product parameter
+- `tf`: (`::Real`, `=.001`) truncation factor
+- `TBP`: (`::Real`, `=10.0`) Time-Bandwidth product parameter
 
 # Returns
 - `seq`: (`::Sequence`) Sequence struct with a HSn RF pulse
@@ -378,39 +380,57 @@ julia> seq = PulseDesigner.RF_sinc(sys.B1, durRF, sys);
 julia> plot_seq(seq)
 ```
 """
-function RF_HSn(B1, T, sys::Scanner; G=[0, 0, 0], Δf=0, n=1, trunc=.001, TBP=10)
-    t0 = T / TBP
-    ζ = maximum(abs.(G)) / sys.Smax
+function RF_HSn( B1, T, sys::Scanner; G=[0.0, 0.0, 0.0], Δf=0.0, n=1, tf=.001, TBP=10.0)
+    # translated from: hyperbolic_secant.m, Curt Corum, 190823
 
-    #sinc_pulse(t) = B1 * sinc(t/t0) .* ((1-a) + a*cos((2π*t)/(TBP*t0)))
-    #sinc_pulse(t) = B1 * sinc(t/t0) .* ((1-trunc) + trunc*cos((2π*t)/(TBP*t0)))
+    # Put HSn as a function...will need to have explicit dt?
 
-    beta = asech( trunc)
-    AM(t) = B1*sech( beta * ( (2*t/T) .^ n));
-    HSn_pulse(t) = AM(t)
-
+    # preliminaries
+    beta = asech( tf)
     
-    # NEED TO CONTROL OWN TIMING BASED on sys.RF_delta
+    dt = sys.RF_Δt
+    dTau = 2*dt/T
+    n_points = trunc( Int, T/dt)
+    time = ((1:n_points) .- 1)*T/n_points
+    
+    bw = TBP/T
+    R_off = Δf * T
+    
+    nyquist_factor1 = abs( n_points/TBP)
+    nyquist_factor2 = abs( n_points/R_off)
+    nyquist_factor  = min( nyquist_factor1, nyquist_factor2) #;print( nyquist_factor)
+   
+    freq = ((1:n_points) .- (n_points/2 -1))/T
+
+    AM = B1.*(sech.( beta * ( (2*time/T) .- 1) .^ n)) #;print( nyquist_factor) # need the sech.( <array argument>)
+
+    #HSn_pulse = AM
+
     # modulation
-    #FM(t) = cumsum( sys.RF_delta(t)*AM(t) .* AM(t));
-    #FM(t) = FM/FM(end); # normalize
-    #FM(t) = bw*(FM(t)-0.5); # center and scale
+    FM = cumsum( dTau .* AM .* AM)
+    FM = FM ./ FM[end]  # normalize
+    FM = bw .* (FM .-0.5)   # center, scale and frequency offset
 
-    #phi = 2*pi*cumsum( dt * FM); % integrate to get phase
-    #phi = circshift( phi, 1); % match AM alignment
+    phi = 2π .* cumsum( dt .* FM)   # integrate to get phase
+    phi = circshift( phi, 1)    # match AM alignment ************** Needed in Julia??????? *****
 
-
-    # combine envelope and phase to get complex pulse
-    #pulse = AM .* exp( i*phi);
+    # combine envelope and phase to get complex pulse, ***** need offset modulation for Δf *****
+    HSn_pulse = AM .* exp.( 1.0im .* phi)
     #pulse = AM .* AM .^((order_n-1)/14).* exp( i*phi); % smooth out bat ears, /16 for HS8
     #pulse = AM .* sqrt( sqrt( AM)) .* exp( i*phi); % smooth out bat ears
+    
+    t0 = T / TBP
+    ζ = maximum( abs.( G)) / sys.Smax
 
-
-    gr1 = [Grad(G[1], T, ζ); Grad(G[2], T, ζ); Grad(G[3], T, ζ)]
-    gr2 = [Grad(-G[1], (T-ζ)/2, ζ); Grad(-G[2], (T-ζ)/2, ζ); Grad(-G[3], (T-ζ)/2, ζ)]
+    gr1 = [Grad( G[1], T, ζ); Grad( G[2], T, ζ); Grad( G[3], T, ζ)]
+    gr2 = [Grad(-G[1], (T-ζ)/2, ζ); Grad( -G[2], (T-ζ)/2, ζ); Grad( -G[3], (T-ζ)/2, ζ)]
     gr = [gr1 gr2]
-    rf = [RF(t->HSn_pulse(t - T/2), T; delay=ζ, Δf) RF(0,0)]
-    return Sequence(gr, rf)
+    
+    rf = [RF( HSn_pulse, T, Δf, ζ) RF( 0,0)] # Δf not working in RF?
+    
+    seq = Sequence( gr, rf)
+    seq.DEF = Dict( "Name"=>"HSn","n"=>n,"tf"=>tf,"TBP"=>TBP,"Δf"=>Δf,"n_points"=>n_points,"dt"=>dt,"bw"=>bw,"nyquist_f"=>nyquist_factor)
+    return seq
 end
 
 
