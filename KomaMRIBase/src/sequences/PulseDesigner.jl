@@ -383,8 +383,8 @@ julia> plot_seq(seq)
 function RF_HSn( B1, T, sys::Scanner; G=[0.0, 0.0, 0.0], Δf=0.0, n=1, tf=.001, TBP=10.0)
     # translated from: hyperbolic_secant.m, Curt Corum, 190823
 
-    # Put HSn as a function...will need to have explicit dt?
-
+    # HSn ########################
+    # make HSn a function
     # preliminaries
     beta = asech( tf)
     
@@ -406,9 +406,7 @@ function RF_HSn( B1, T, sys::Scanner; G=[0.0, 0.0, 0.0], Δf=0.0, n=1, tf=.001, 
 
     AM = B1.*(sech.( beta * ( (2*time/T) .- 1) .^ n)) #;print( nyquist_factor) # need the sech.( <array argument>)
 
-    #HSn_pulse = AM
-
-    # modulation
+    # frequency modulation
     FM = cumsum( dTau .* AM .* AM)
     FM = FM ./ FM[end]  # normalize
     FM = bw .* (FM .-0.5)   # center, scale and frequency offset
@@ -420,6 +418,10 @@ function RF_HSn( B1, T, sys::Scanner; G=[0.0, 0.0, 0.0], Δf=0.0, n=1, tf=.001, 
     HSn_pulse = AM .* exp.( 1.0im .* phi)
     #pulse = AM .* AM .^((order_n-1)/14).* exp( i*phi); % smooth out bat ears, /16 for HS8
     #pulse = AM .* sqrt( sqrt( AM)) .* exp( i*phi); % smooth out bat ears
+    # end HSn ####################
+    
+    # additional amplitude modulation, gapping
+    
     
     t0 = T / TBP
     ζ = maximum( abs.( G)) / sys.Smax
