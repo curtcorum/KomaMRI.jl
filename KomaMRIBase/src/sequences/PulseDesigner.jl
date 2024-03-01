@@ -399,7 +399,9 @@ function RF_HSn( B1, T, sys::Scanner; G=[0.0, 0.0, 0.0], Δf=0.0, n=1, tf=.001, 
     nyquist_factor1 = abs( n_points/TBP)
     nyquist_factor2 = abs( n_points/R_off)
     nyquist_factor  = min( nyquist_factor1, nyquist_factor2) #;print( nyquist_factor)
-   
+    nyquist_error = 4; T_min = T*nyquist_error/nyquist_factor
+    nyquist_factor < nyquist_error ? error( "Sample rate of pulse $(nyquist_factor) is less than $(nyquist_error), increase T to at least " *string(T_min) *" s") : 0
+    
     freq = ((1:n_points) .- (n_points/2 -1))/T
 
     AM = B1.*(sech.( beta * ( (2*time/T) .- 1) .^ n)) #;print( nyquist_factor) # need the sech.( <array argument>)
