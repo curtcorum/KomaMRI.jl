@@ -346,5 +346,97 @@ function EPI_example(; sys=Scanner())
 end
 
 
+# WORKING BELOW CAC 230228 *************************************************************************
+
+"""
+	seq = RF_HSn(B1, T, sys; G=[0, 0, 0], Δf=0, n=1, TBP=4)
+
+Returns a sequence with an adiabatic stretched hyperbolic secant pulse of order n (HSn) RF waveform.
+
+# References
+- Djaudat Idiyatullin, Curt Corum, Steen Moeller, Michael Garwood, Gapped pulses for frequency-swept MRI, 2008, https://doi.org/10.1016/j.jmr.2008.05.009, 
+
+# Arguments
+- `B1`: (`::Number`, `[T]`) RF amplitude
+- `T`: (`::Real`, `[s]`) RF duration
+- `sys`: (`::Scanner`) Scanner struct
+
+# Keywords
+- `G`: (`::Vector{Real}`, `=[0.0, 0.0, 0.0]`, `[T/m]`) gradient amplitudes for x, y, z
+- `Δf`: (`::Real`, `=0.0`, `[Hz]`) RF pulse carrier frequency displacement *** Not Yet Implemented ***
+- `n`: (`::Integer`, `=1`) HSn order 'n'
+- `tf`: (`::Real`, `=.001`) truncation factor
+- `TBP`: (`::Real`, `=10.0`) Time-Bandwidth product parameter
+
+# Returns
+- `seq`: (`::Sequence`) Sequence struct with a HSn RF pulse
+
+# Examples
+```julia-repl
+julia> sys = Scanner(); durRF = π / 2 / (2π * γ * sys.B1);
+
+julia> seq = PulseDesigner.RF_sinc(sys.B1, durRF, sys);
+
+julia> plot_seq(seq)
+```
+"""
+function RF_HSn( B1, T, sys::Scanner; G=[0.0, 0.0, 0.0], Δf=0.0, n=1, tf=.001, TBP=10.0)
+    # translated from: hyperbolic_secant.m, Curt Corum, 190823
+
+    # HSn ########################
+    # make HSn a function
+    # preliminaries
+    beta = asech( tf)
+    
+    dt = sys.RF_Δt
+    dTau = 2*dt/T
+    n_points = trunc( Int, T/dt)
+    time = ((1:n_points) .- 1)*T/n_points
+    
+    bw = TBP/T
+    R_off = Δf * T
+    
+    nyquist_factor1 = abs( n_points/TBP)
+    nyquist_factor2 = abs( n_points/R_off)
+    nyquist_factor  = min( nyquist_factor1, nyquist_factor2) #;print( nyquist_factor)
+    nyquist_error = 4; T_min = T*nyquist_error/nyquist_factor
+    nyquist_factor < nyquist_error ? error( "Sample rate of pulse $(nyquist_factor) is less than $(nyquist_error), increase T to at least " *string(T_min) *" s") : 0
+    
+    freq = ((1:n_points) .- (n_points/2 -1))/T
+
+    AM = B1.*(sech.( beta * ( (2*time/T) .- 1) .^ n)) #;print( nyquist_factor) # need the sech.( <array argument>)
+
+    # frequency modulation
+    FM = cumsum( dTau .* AM .* AM)
+    FM = FM ./ FM[end]  # normalize
+    FM = bw .* (FM .-0.5)   # center, scale and frequency offset
+
+    phi = 2π .* cumsum( dt .* FM)   # integrate to get phase
+    phi = circshift( phi, 1)    # match AM alignment ************** Needed in Julia??????? *****
+
+    # combine envelope and phase to get complex pulse, ***** need offset modulation for Δf *****
+    HSn_pulse = AM .* exp.( 1.0im .* phi)
+    #pulse = AM .* AM .^((order_n-1)/14).* exp( i*phi); % smooth out bat ears, /16 for HS8
+    #pulse = AM .* sqrt( sqrt( AM)) .* exp( i*phi); % smooth out bat ears
+    # end HSn ####################
+    
+    # additional amplitude modulation, gapping
+    
+    
+    t0 = T / TBP
+    ζ = maximum( abs.( G)) / sys.Smax
+
+    gr1 = [Grad( G[1], T, ζ); Grad( G[2], T, ζ); Grad( G[3], T, ζ)]
+    gr2 = [Grad(-G[1], (T-ζ)/2, ζ); Grad( -G[2], (T-ζ)/2, ζ); Grad( -G[3], (T-ζ)/2, ζ)]
+    gr = [gr1 gr2]
+    
+    rf = [RF( HSn_pulse, T, Δf, ζ) RF( 0,0)] # Δf not working in RF?
+    
+    seq = Sequence( gr, rf)
+    seq.DEF = Dict( "Name"=>"HSn","n"=>n,"tf"=>tf,"TBP"=>TBP,"Δf"=>Δf,"n_points"=>n_points,"dt"=>dt,"bw"=>bw,"nyquist_f"=>nyquist_factor)
+    return seq
+end
+
+
 export EPI, radial_base, EPI_example
 end
