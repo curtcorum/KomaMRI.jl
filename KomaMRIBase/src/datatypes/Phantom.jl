@@ -396,12 +396,13 @@ function brain_phantom3D(;ss=4,us=1,start_end=[160, 200])
 end
 
 """
-    obj = pelvis_phantom2D(; ss=4)
+    obj = pelvis_phantom2D(; ss=4, us=1)
 
 Creates a two-dimensional pelvis Phantom struct.
 
 # Keywords
 - `ss`: (`::Integer`, `=4`) subsampling parameter
+- `us`: (`::Integer`, `=1`) upsampling parameter for all axes, if used ss is set to ss=1
 
 # Returns
 - `obj`: (`::Phantom`) Phantom struct
@@ -418,10 +419,11 @@ function pelvis_phantom2D(; ss=4)
     # Get data from .mat file
     path = @__DIR__
     data = MAT.matread(path*"/phantom/pelvis2D.mat")
-    class = data["pelvis3D_slice"][1:ss:end,1:ss:end]
+    if us > 1; ss=1; end
+    class = repeat( data["pelvis3D_slice"][1:ss:end,1:ss:end], inner=[us, us])
 
     # Define spin position vectors
-    Δx = .5e-3*ss
+    Δx = .5e-3*ss/us
     M, N = size(class)
     FOVx = (M-1)*Δx             # [m]
     FOVy = (N-1)*Δx             # [m]
