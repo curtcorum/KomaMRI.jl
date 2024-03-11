@@ -205,7 +205,6 @@ function brain_phantom2D(; axis="axial", ss=4, us=1)
     
     # Define spin position vectors
     Δx = .5e-3*ss/us
-    @info "Brain phantom 2D sample spacing is $(Δx*1000) mm."
     M, N = size(class)
     FOVx = (M-1)*Δx #[m]
     FOVy = (N-1)*Δx #[m]
@@ -296,6 +295,7 @@ Creates a three-dimentional brain Phantom struct.
 # Keywords
 - `ss`: (`::Integer`, `=4`) subsampling parameter in all axes
 - `us`: (`::Integer`, `=1`) upsampling parameter for all axes, if used ss is set to ss=1
+- `start_end`: (`::Vector{Integer}`, `=[160,200]`) z index range of presampled phantom, 180 is center
 
 # Returns
 - `obj`: (`::Phantom`) 3D Phantom struct
@@ -317,7 +317,6 @@ function brain_phantom3D(;ss=4,us=1,start_end=[160, 200])
 
     # Define spin position vectors
     Δx = .5e-3*ss/us
-    @info "Brain phantom 3D sample spacing is $(Δx*1000) mm."
     M, N, Z = size(class)
     FOVx = (M-1)*Δx #[m]
     FOVy = (N-1)*Δx #[m]
@@ -426,7 +425,6 @@ function pelvis_phantom2D(; ss=4, us=1)
 
     # Define spin position vectors
     Δx = .5e-3*ss/us
-    @info "Pelvis phantom 2D sample spacing is $(Δx*1000) mm."
     M, N = size(class)
     FOVx = (M-1)*Δx             # [m]
     FOVy = (N-1)*Δx             # [m]
