@@ -380,7 +380,7 @@ julia> seq = PulseDesigner.RF_sinc(sys.B1, durRF, sys);
 julia> plot_seq(seq)
 ```
 """
-function RF_HSn( B1, T, sys::Scanner; G=[0.0, 0.0, 0.0], Δf=0.0, n=1, tf=.001, TBP=10.0)
+function RF_HSn( B1, T, sys::Scanner; G=[0.0, 0.0, 0.0], Δf=0.0, n=1, tf=.001, TBP=10.0, n_pulses=1, duty=1.0)
     # translated from: hyperbolic_secant.m, Curt Corum, 190823
 
     # HSn ########################
@@ -403,8 +403,23 @@ function RF_HSn( B1, T, sys::Scanner; G=[0.0, 0.0, 0.0], Δf=0.0, n=1, tf=.001, 
     nyquist_factor < nyquist_error ? error( "Sample rate of pulse $(nyquist_factor) is less than $(nyquist_error), increase T to at least " *string(T_min) *" s") : 0
     
     freq = ((1:n_points) .- (n_points/2 -1))/T
+    
+    # Define square wave here
+    function sq_wv( xa::Real, θa::Real)
+        0 ≤ θa ≤ 1 || throw( DomainError( θ, "sq_wv(x, θ) is only defined for 0 ≤ θ ≤ 1."))
+	  	outval = 1.0
+	  	if mod( xa, 1.0) == θa || mod( xa, 1.0) == 0
+			outval = 0.5
+		elseif mod( xa, 1.0) > θa
+			outval = 0.0
+		end
+	    return outval  
+    end
 
-    AM = B1.*(sech.( beta * ( (2*time/T) .- 1) .^ n)) #;print( nyquist_factor) # need the sech.( <array argument>)
+    #AM = B1 .* sq_wv.( ((2*time/T) .- 1) .* n_pulses, duty) .* sech.( beta * ( (2*time/T) .- 1) .^ n) #;print( nyquist_factor) # need the sech.( <array argument>)
+    #AM = B1 .* sq_wv.( (time ./ n_points) * n_pulses, duty)
+    #AM = B1 .* sq_wv.( (time ./ n_points) .* n_pulses, duty)
+    AM = (time ./ n_points) .* n_pulses
 
     # frequency modulation
     FM = cumsum( dTau .* AM .* AM)
@@ -415,13 +430,11 @@ function RF_HSn( B1, T, sys::Scanner; G=[0.0, 0.0, 0.0], Δf=0.0, n=1, tf=.001, 
     phi = circshift( phi, 1)    # match AM alignment ************** Needed in Julia??????? *****
 
     # combine envelope and phase to get complex pulse, ***** need offset modulation for Δf *****
-    HSn_pulse = AM .* exp.( 1.0im .* phi)
+    #HSn_pulse = AM .* exp.( 1.0im .* phi)
+    HSn_pulse = AM
     #pulse = AM .* AM .^((order_n-1)/14).* exp( i*phi); % smooth out bat ears, /16 for HS8
     #pulse = AM .* sqrt( sqrt( AM)) .* exp( i*phi); % smooth out bat ears
     # end HSn ####################
-    
-    # additional amplitude modulation, gapping
-    
     
     t0 = T / TBP
     ζ = maximum( abs.( G)) / sys.Smax
