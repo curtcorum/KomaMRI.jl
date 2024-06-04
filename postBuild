@@ -1,2 +1,2 @@
 # for binder
-julia -e 'Pkg.add(["Pluto", "PlutoUI", "PlutoPlotly"])'
+julia -e 'import Pkg; Pkg.add( ["Pluto", "PlutoUI", "PlutoPlotly"])'
