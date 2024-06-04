@@ -1,0 +1,2 @@
+# for binder
+julia -e 'Pkg.add(["Pluto", "PlutoUI", "PlutoPlotly"])'
