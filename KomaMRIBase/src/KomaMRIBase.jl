@@ -33,6 +33,7 @@ include("datatypes/Phantom.jl")
 include("datatypes/simulation/DiscreteSequence.jl")
 include("timing/TimeStepCalculation.jl")
 include("timing/TrapezoidalIntegration.jl")
+include("timing/UnitTime.jl")
 
 # Main
 export γ    # gyro-magnetic ratio [Hz/T]
@@ -53,8 +54,7 @@ export NoMotion, SimpleMotion, ArbitraryMotion
 export SimpleMotionType
 export Translation, Rotation, HeartBeat
 export PeriodicTranslation, PeriodicRotation, PeriodicHeartBeat
-export get_spin_coords, sort_motions!
-export LinearInterpolator
+export get_spin_coords
 # Secondary
 export get_kspace, rotx, roty, rotz
 # Additionals
