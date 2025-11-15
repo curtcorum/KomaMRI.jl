@@ -1,7 +1,7 @@
 name = "KomaMRIPlots"
 uuid = "76db0263-63f3-4d26-bb9a-5dba378db904"
 authors = ["Carlos Castillo Passi <cncastillo@uc.cl>"]
-version = "0.9.0"
+version = "0.9.5"
 
 [deps]
 Interpolations = "a98d9a8b-a2ab-59e6-89dd-64a1c18fca59"
@@ -19,9 +19,8 @@ PlutoPlotly = "8e989ff0-3d88-8e9f-f020-2b208a939ff0"
 KomaPlotsPlutoPlotlyExt = "PlutoPlotly"
 
 [compat]
-Interpolations = "0.13, 0.14, 0.15"
-Kaleido_jll = "0.1"
-KomaMRIBase = "0.9"
+Interpolations = "0.13, 0.14, 0.15, 0.16"
+KomaMRIBase = "0.9.4"
 MAT = "0.10"
 PlotlyJS = "0.18"
 PlutoPlotly = "0.4, 0.5, 0.6"

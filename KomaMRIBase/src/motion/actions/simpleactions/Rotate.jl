@@ -1,5 +1,5 @@
 @doc raw"""
-    rotate = Rotate(pitch, roll, yaw)
+    r = Rotate(pitch, roll, yaw, center=nothing)
  
 Rotate struct. It produces a rotation in the three axes: 
 x (pitch), y (roll), and z (yaw).
@@ -41,19 +41,29 @@ R &= R_z(\alpha) R_y(\beta) R_x(\gamma) \\
 - `pitch`: (`::Real`, `[º]`) rotation in x
 - `roll`: (`::Real`, `[º]`) rotation in y 
 - `yaw`: (`::Real`, `[º]`) rotation in z
+- `center`: (`::NTuple{3,Real}` or `nothing`) optional center of rotation, given in global coordinates. If `nothing` (default), the rotation is performed around the phantom’s center of mass.
+
+# Notes
+- Rotations are applied around the point specified in `center`. If omitted, the rotation is centered at the phantom’s center of mass.
+- If `center` is not null, the rotation center is interpreted as a fixed point in space (absolute/global coordinates).
+- This design ensures that consecutive or inverse rotations behave consistently and predictably, since the rotation center does not change with object transformations.
 
 # Returns
-- `rotate`: (`::Rotate`) Rotate struct
+- `r`: (`::Rotate`) Rotate struct
 
 # Examples
 ```julia-repl
-julia> rotate = Rotate(pitch=15.0, roll=0.0, yaw=20.0)
+julia> r = Rotate(pitch=15.0, roll=0.0, yaw=20.0)
+
+julia> r = Rotate(pitch=0.0, roll=45.0, yaw=0.0, center=(5e-3,0.0,0.0))
+# Rotates around a point 5 mm to the right of the center of mass
 ```
 """
 @with_kw struct Rotate{T<:Real} <: SimpleAction{T}
     pitch      :: T
     roll       :: T
     yaw        :: T
+    center     :: Union{Nothing,NTuple{3,T}} = nothing
 end
 
 RotateX(pitch::T) where {T<:Real} = Rotate(pitch, zero(T), zero(T))
@@ -66,9 +76,15 @@ function displacement_x!(ux, action::Rotate, x, y, z, t)
     α = t .* (action.yaw*π/180)
     β = t .* (action.roll*π/180)
     γ = t .* (action.pitch*π/180)
-    ux .= cos.(α) .* cos.(β) .* x +
-         (cos.(α) .* sin.(β) .* sin.(γ) .- sin.(α) .* cos.(γ)) .* y +
-         (cos.(α) .* sin.(β) .* cos.(γ) .+ sin.(α) .* sin.(γ)) .* z .- x
+    cx = isnothing(action.center) ? sum(x) / length(x) : action.center[1]
+    cy = isnothing(action.center) ? sum(y) / length(y) : action.center[2]
+    cz = isnothing(action.center) ? sum(z) / length(z) : action.center[3]
+    x0 = x .- cx
+    y0 = y .- cy
+    z0 = z .- cz
+    ux .= cos.(α) .* cos.(β) .* x0 +
+         (cos.(α) .* sin.(β) .* sin.(γ) .- sin.(α) .* cos.(γ)) .* y0 +
+         (cos.(α) .* sin.(β) .* cos.(γ) .+ sin.(α) .* sin.(γ)) .* z0 .+ cx .- x
     return nothing
 end
 
@@ -76,9 +92,15 @@ function displacement_y!(uy, action::Rotate, x, y, z, t)
     α = t .* (action.yaw*π/180)
     β = t .* (action.roll*π/180)
     γ = t .* (action.pitch*π/180)
-    uy .= sin.(α) .* cos.(β) .* x +
-         (sin.(α) .* sin.(β) .* sin.(γ) .+ cos.(α) .* cos.(γ)) .* y +
-         (sin.(α) .* sin.(β) .* cos.(γ) .- cos.(α) .* sin.(γ)) .* z .- y
+    cx = isnothing(action.center) ? sum(x) / length(x) : action.center[1]
+    cy = isnothing(action.center) ? sum(y) / length(y) : action.center[2]
+    cz = isnothing(action.center) ? sum(z) / length(z) : action.center[3]
+    x0 = x .- cx
+    y0 = y .- cy
+    z0 = z .- cz
+    uy .= sin.(α) .* cos.(β) .* x0 +
+         (sin.(α) .* sin.(β) .* sin.(γ) .+ cos.(α) .* cos.(γ)) .* y0 +
+         (sin.(α) .* sin.(β) .* cos.(γ) .- cos.(α) .* sin.(γ)) .* z0 .+ cy .- y
     return nothing
 end
 
@@ -86,8 +108,14 @@ function displacement_z!(uz, action::Rotate, x, y, z, t)
     α = t .* (action.yaw*π/180)
     β = t .* (action.roll*π/180)
     γ = t .* (action.pitch*π/180)
-    uz .=  -sin.(β) .* x + 
-            cos.(β) .* sin.(γ) .* y +
-            cos.(β) .* cos.(γ) .* z .- z
+    cx = isnothing(action.center) ? sum(x) / length(x) : action.center[1]
+    cy = isnothing(action.center) ? sum(y) / length(y) : action.center[2]
+    cz = isnothing(action.center) ? sum(z) / length(z) : action.center[3]
+    x0 = x .- cx
+    y0 = y .- cy
+    z0 = z .- cz
+    uz .=  -sin.(β) .* x0 + 
+            cos.(β) .* sin.(γ) .* y0 +
+            cos.(β) .* cos.(γ) .* z0 .+ cz .- z
     return nothing
 end

@@ -242,8 +242,49 @@ using TestItems, TestItemRunner
 
     end
 
+    @testset "EXT" begin
+
+        lInc = LabelInc(1,"LIN")
+        lSet = LabelSet(1,"ECO")
+        lSet2 = LabelSet(0,"LIN")
+        trig = Trigger(0,1,100,500)
+
+        d = Sequence([Grad(0,0.1)])
+        seq = Sequence()
+        d.EXT = [[lInc]]; 
+        seq += d
+        seq += d
+        d.EXT = [[lInc,lSet]]
+        seq += d
+        d.EXT = [[lInc]]; 
+        seq += d
+        d.EXT = [[lSet2,trig]]; 
+        seq += d
+        d.EXT = [[]]; 
+        seq += d
+
+        @test seq.EXT[5][2] == trig && seq.EXT[5][1] == lSet2
+
+        l = get_label(seq)
+        LIN_vec = [l[i].LIN for i in eachindex(l)] 
+        @test LIN_vec == vec([1 2 3 4 0 0])
+
+        ECO_vec = [l[i].ECO for i in eachindex(l)] 
+        @test ECO_vec == vec([0 0 1 1 1 1])
+
+        # Modification of the label directly in the sequence
+        lSetPhs = LabelSet(2,"PHS")
+        seq.EXT[4] = [lSetPhs]
+        l = get_label(seq)
+
+        LIN_vec = [l[i].LIN for i in eachindex(l)] 
+        @test LIN_vec == vec([1 2 3 3 0 0])
+        PHS_vec = [l[i].PHS for i in eachindex(l)] 
+        @test PHS_vec == vec([0 0 0 2 2 2])
+
+    end
+
     @testset "DiscreteSequence" begin
-        path = joinpath(@__DIR__, "test_files")
         seq = PulseDesigner.EPI_example()
         sampling_params = KomaMRIBase.default_sampling_params()
         t, Δt = KomaMRIBase.get_variable_times(seq; Δt=sampling_params["Δt"], Δt_rf=sampling_params["Δt_rf"])
@@ -279,7 +320,6 @@ using TestItems, TestItemRunner
     end
 
     @testset "SequenceFunctions" begin
-        path = joinpath(@__DIR__, "test_files")
         seq = PulseDesigner.EPI_example()
         t, Δt = KomaMRIBase.get_variable_times(seq; Δt=1)
         t_adc =  KomaMRIBase.get_adc_sampling_times(seq)
@@ -368,11 +408,13 @@ end
 
 @testitem "Motion" tags=[:base] begin
     @testset "Constructors" begin
-        action = Rotate(10.0, 20.0, 40.0)
+        action = Rotate(10.0, 20.0, 40.0, (0.0, 0.0, 0.0))
         spins = AllSpins()
         # TimeCurve constructors
         time = TimeRange(t_start=0.0, t_end=1.0)
         time = Periodic(period=1.0, asymmetry=0.5)
+        time = Periodic(period=1.0, asymmetry=0.0)
+        time = Periodic(period=1.0, asymmetry=1.0)
         time = TimeCurve([0.0, eps()], [0.0, 1.0])
         # Motion constructors
         m = Motion(action, time, spins)
@@ -384,8 +426,8 @@ end
         @test MotionList(m) == m
     end
     @testset "Subset" begin
-        rotate = Rotate(10.0, 20.0, 40.0)
-        translate = Translate(0.1, 0.2, 0.3)
+        rt = Rotate(10.0, 20.0, 40.0, (0.0, 0.0, 0.0))
+        tr = Translate(0.1, 0.2, 0.3)
         time = TimeRange(0.0, eps())
         spins = AllSpins()
         rng = rng = 1:2:5
@@ -393,12 +435,12 @@ end
         nm = NoMotion()
         @test nm[rng] == nm
         # Motion
-        m = Motion(rotate, time, spins)
+        m = Motion(rt, time, spins)
         @test m[rng] == m
         # MotionList 
         ml = MotionList(
-            Motion(rotate, time, spins),
-            Motion(translate, time, spins)
+            Motion(rt, time, spins),
+            Motion(tr, time, spins)
         )
         @test ml[rng] == ml 
     end
@@ -418,7 +460,7 @@ end
         t = collect(range(t_start, t_end, 11))
         dx, dy, dz = [1.0, 0.0, 0.0]
         vx, vy, vz = [dx, dy, dz] ./ (t_end - t_start)
-        translation = Translate(dx, dy, dz, TimeRange(t_start, t_end))
+        translation = translate(dx, dy, dz, TimeRange(t_start, t_end))
         xt, yt, zt = get_spin_coords(translation, ph.x, ph.y, ph.z, t')
         @test xt == ph.x .+ vx.*t'
         @test yt == ph.y .+ vy.*t'
@@ -432,45 +474,60 @@ end
         asymmetry = 0.5
         dx, dy, dz = [1.0, 0.0, 0.0]
         vx, vy, vz = [dx, dy, dz] ./ (t_end - t_start)
-        periodictranslation = Translate(dx, dy, dz, Periodic(period=period, asymmetry=asymmetry))
+        periodictranslation = translate(dx, dy, dz, Periodic(period=period, asymmetry=asymmetry))
         xt, yt, zt = get_spin_coords(periodictranslation, ph.x, ph.y, ph.z, t')
         @test xt == ph.x .+ vx.*t'
         @test yt == ph.y .+ vy.*t'
         @test zt == ph.z .+ vz.*t'
     end
     @testset "Rotate" begin
-        ph = Phantom(x=[1.0], y=[1.0])
+        ph = Phantom(x=[1.0, 1.0, -1.0, -1.0], y=[1.0, -1.0, 1.0, -1.0])
         t_start=0.0; t_end=1.0 
         t = collect(range(t_start, t_end, 11))
         pitch = 45.0
-        roll = 0.0
+        roll = 45.0
         yaw = 45.0
-        rotation = Rotate(pitch, roll, yaw, TimeRange(t_start, t_end))
+        # One single rotation
+        rotation = rotate(pitch, roll, yaw, TimeRange(t_start, t_end))
         xt, yt, zt = get_spin_coords(rotation, ph.x, ph.y, ph.z, t')
-        r = vcat(ph.x, ph.y, ph.z)
         R = rotz(π*yaw/180) * roty(π*roll/180) * rotx(π*pitch/180)
-        rot_x, rot_y, rot_z = R*r
-        @test xt[end ,end] ≈ rot_x
-        @test yt[end ,end] ≈ rot_y
-        @test zt[end ,end] ≈ rot_z
+        r = hcat(ph.x, ph.y, ph.z)'
+        rotated = R * r 
+        rot_x, rot_y, rot_z = eachrow(rotated)
+        @test xt[: ,end] ≈ rot_x
+        @test yt[: ,end] ≈ rot_y
+        @test zt[: ,end] ≈ rot_z
+        # Check if two consecutive rotations (α and β) produce the same result as a single (α + β) rotation
+        t = [1.0] 
+        r1 = MotionList(
+            rotate(0.0, 0.0, yaw/2, TimeRange(t_start, t_end/2)),
+            rotate(0.0, 0.0, yaw/2, TimeRange(t_end/2, t_end))
+        )
+        r2 = rotate(0.0, 0.0, yaw, TimeRange(t_start, t_end))
+        xt1, yt1, zt1 = get_spin_coords(r1, ph.x, ph.y, ph.z, t)
+        xt2, yt2, zt2 = get_spin_coords(r2, ph.x, ph.y, ph.z, t)
+        @test xt1 ≈ xt2
+        @test yt1 ≈ yt2
+        @test zt1 ≈ zt2
     end
     @testset "PeriodicRotation" begin
-        ph = Phantom(x=[1.0], y=[1.0])
+        ph = Phantom(x=[1.0, 1.0, -1.0, -1.0], y=[1.0, -1.0, 1.0, -1.0])
         t_start=0.0; t_end=1.0 
         t = collect(range(t_start, t_end, 11))
         period = 2.0
         asymmetry = 0.5
         pitch = 45.0
-        roll = 0.0
+        roll = 45.0
         yaw = 45.0
-        periodicrotation = Rotate(pitch, roll, yaw, Periodic(period=period, asymmetry=asymmetry))
+        periodicrotation = rotate(pitch, roll, yaw, Periodic(period=period, asymmetry=asymmetry))
         xt, yt, zt = get_spin_coords(periodicrotation, ph.x, ph.y, ph.z, t')
-        r = vcat(ph.x, ph.y, ph.z)
         R = rotz(π*yaw/180) * roty(π*roll/180) * rotx(π*pitch/180)
-        rot_x, rot_y, rot_z = R*r
-        @test xt[end ,end] ≈ rot_x
-        @test yt[end ,end] ≈ rot_y
-        @test zt[end ,end] ≈ rot_z
+        r = hcat(ph.x, ph.y, ph.z)'
+        rotated = R * r 
+        rot_x, rot_y, rot_z = eachrow(rotated)
+        @test xt[: ,end] ≈ rot_x
+        @test yt[: ,end] ≈ rot_y
+        @test zt[: ,end] ≈ rot_z
     end
     @testset "HeartBeat" begin
         ph = Phantom(x=[1.0], y=[1.0])
@@ -479,8 +536,8 @@ end
         circumferential_strain = -0.1
         radial_strain = 0.0
         longitudinal_strain = -0.1
-        heartbeat = HeartBeat(circumferential_strain, radial_strain, longitudinal_strain, TimeRange(t_start, t_end))
-        xt, yt, zt = get_spin_coords(heartbeat, ph.x, ph.y, ph.z, t')
+        hb = heartbeat(circumferential_strain, radial_strain, longitudinal_strain, TimeRange(t_start, t_end))
+        xt, yt, zt = get_spin_coords(hb, ph.x, ph.y, ph.z, t')
         r = sqrt.(ph.x .^ 2 + ph.y .^ 2)
         θ = atan.(ph.y, ph.x)
         @test xt[:,end] == ph.x .* (1 .+ circumferential_strain * maximum(r) .* cos.(θ))
@@ -496,8 +553,8 @@ end
         circumferential_strain = -0.1
         radial_strain = 0.0
         longitudinal_strain = -0.1
-        periodicheartbeat = HeartBeat(circumferential_strain, radial_strain, longitudinal_strain, Periodic(period=period, asymmetry=asymmetry))
-        xt, yt, zt = get_spin_coords(periodicheartbeat, ph.x, ph.y, ph.z, t')
+        periodic_hb = heartbeat(circumferential_strain, radial_strain, longitudinal_strain, Periodic(period=period, asymmetry=asymmetry))
+        xt, yt, zt = get_spin_coords(periodic_hb, ph.x, ph.y, ph.z, t')
         r = sqrt.(ph.x .^ 2 + ph.y .^ 2)
         θ = atan.(ph.y, ph.x)
         @test xt[:,end] == ph.x .* (1 .+ circumferential_strain * maximum(r) .* cos.(θ))
@@ -514,9 +571,9 @@ end
         dx = rand(Ns, Nt)
         dy = rand(Ns, Nt)
         dz = rand(Ns, Nt)
-        arbitrarymotion = Path(dx, dy, dz, TimeRange(t_start, t_end))
+        pt = path(dx, dy, dz, TimeRange(t_start, t_end))
         t = range(t_start, t_end, Nt)
-        xt, yt, zt = get_spin_coords(arbitrarymotion, ph.x, ph.y, ph.z, t')
+        xt, yt, zt = get_spin_coords(pt, ph.x, ph.y, ph.z, t')
         @test xt == ph.x .+ dx
         @test yt == ph.y .+ dy
         @test zt == ph.z .+ dz
@@ -529,9 +586,9 @@ end
         dx = rand(Ns, Nt)
         dy = rand(Ns, Nt)
         dz = rand(Ns, Nt)
-        arbitrarymotion = Path(dx, dy, dz, TimeRange(t_start, t_end))
+        pt = path(dx, dy, dz, TimeRange(t_start, t_end))
         t = range(t_start, t_end, Nt)
-        xt, yt, zt = get_spin_coords(arbitrarymotion, ph.x, ph.y, ph.z, t')
+        xt, yt, zt = get_spin_coords(pt, ph.x, ph.y, ph.z, t')
         @test xt == ph.x .+ dx
         @test yt == ph.y .+ dy
         @test zt == ph.z .+ dz
@@ -546,9 +603,9 @@ end
         dx = rand(Ns, Nt)
         dy = rand(Ns, Nt)
         dz = rand(Ns, Nt)
-        arbitrarymotion = FlowPath(dx, dy, dz, Bool.(zeros(Ns, Nt)), TimeRange(t_start, t_end))
+        fp = flowpath(dx, dy, dz, Bool.(zeros(Ns, Nt)), TimeRange(t_start, t_end))
         t = range(t_start, t_end, Nt)
-        xt, yt, zt = get_spin_coords(arbitrarymotion, ph.x, ph.y, ph.z, t')
+        xt, yt, zt = get_spin_coords(fp, ph.x, ph.y, ph.z, t')
         @test xt == ph.x .+ dx
         @test yt == ph.y .+ dy
         @test zt == ph.z .+ dz
@@ -561,33 +618,34 @@ end
         dx = rand(Ns, Nt)
         dy = rand(Ns, Nt)
         dz = rand(Ns, Nt)
-        arbitrarymotion = FlowPath(dx, dy, dz, Bool.(zeros(Ns, Nt)), TimeRange(t_start, t_end))
+        fp = flowpath(dx, dy, dz, Bool.(zeros(Ns, Nt)), TimeRange(t_start, t_end))
         t = range(t_start, t_end, Nt)
-        xt, yt, zt = get_spin_coords(arbitrarymotion, ph.x, ph.y, ph.z, t')
+        xt, yt, zt = get_spin_coords(fp, ph.x, ph.y, ph.z, t')
         @test xt == ph.x .+ dx
         @test yt == ph.y .+ dy
         @test zt == ph.z .+ dz
     end
     @testset "Translate + Rotate" begin
-        ph = Phantom(x=[1.0], y=[1.0])
+        ph = Phantom(x=[1.0, 1.0, -1.0, -1.0], y=[1.0, -1.0, 1.0, -1.0])
         t_start=0.0; t_end=1.0 
         t = collect(range(t_start, t_end, 11))
         # Translate
         dx, dy, dz = [1.0, 0.0, 0.0]
         vx, vy, vz = [dx, dy, dz] ./ (t_end - t_start)
-        translation = Translate(dx, dy, dz, TimeRange(t_start, t_end))
+        translation = translate(dx, dy, dz, TimeRange(t_start, t_end))
         # Rotate
-        pitch, roll, yaw = [45.0, 0.0, 45.0]
-        rotation = Rotate(pitch, roll, yaw, TimeRange(t_start, t_end))
-        r = vcat(ph.x, ph.y, ph.z)
+        pitch, roll, yaw = [45.0, 45.0, 45.0]
+        rotation = rotate(pitch, roll, yaw, TimeRange(t_start, t_end))
         R = rotz(π*yaw/180) * roty(π*roll/180) * rotx(π*pitch/180)
-        rot_x, rot_y, rot_z = R*r
+        r = hcat(ph.x, ph.y, ph.z)'
+        rotated = R * r 
+        rot_x, rot_y, rot_z = eachrow(rotated)
         # Combination into a MotionList
         motion = MotionList(translation, rotation)
         xt, yt, zt = get_spin_coords(motion, ph.x, ph.y, ph.z, t')
-        @test xt[end ,end] ≈ rot_x + vx*t[end]
-        @test yt[end ,end] ≈ rot_y + vy*t[end]
-        @test zt[end ,end] ≈ rot_z + vz*t[end]        
+        @test xt[: ,end] ≈ rot_x .+ vx*t[end]
+        @test yt[: ,end] ≈ rot_y .+ vy*t[end]
+        @test zt[: ,end] ≈ rot_z .+ vz*t[end]
     end
 end
 
@@ -611,23 +669,23 @@ end
     Nt = 3
     t_start = 0.0
     t_end = 1.0
-    translate = Translate(0.05, 0.05, 0.0, Periodic(period=0.5, asymmetry=0.5))
-    rotate = Rotate(0.0, 0.0, 90.0, TimeRange(t_start=0.05, t_end=0.5), SpinRange(1:3))
-    path = Path(0.01 .* rand(Ns, Nt), 0.01 .* rand(Ns, Nt), 0.01 .* rand(Ns, Nt), TimeRange(t_start, t_end), SpinRange(2:2:4))
+    tr = translate(0.05, 0.05, 0.0, Periodic(period=0.5, asymmetry=0.5))
+    rt = rotate(0.0, 0.0, 90.0, TimeRange(t_start=0.05, t_end=0.5), SpinRange(1:3))
+    pt = path(0.01 .* rand(Ns, Nt), 0.01 .* rand(Ns, Nt), 0.01 .* rand(Ns, Nt), TimeRange(t_start, t_end), SpinRange(2:2:4))
     @testset "Comparison" begin
-        obj1 = Phantom(name=name, x=x, y=y, z=z, ρ=ρ, T1=T1, T2=T2, T2s=T2s, Δw=Δw, Dλ1=Dλ1, Dλ2=Dλ2, Dθ=Dθ, motion=MotionList(translate, rotate))
-        obj2 = Phantom(name=name, x=x, y=y, z=z, ρ=ρ, T1=T1, T2=T2, T2s=T2s, Δw=Δw, Dλ1=Dλ1, Dλ2=Dλ2, Dθ=Dθ, motion=MotionList(translate, rotate))
+        obj1 = Phantom(name=name, x=x, y=y, z=z, ρ=ρ, T1=T1, T2=T2, T2s=T2s, Δw=Δw, Dλ1=Dλ1, Dλ2=Dλ2, Dθ=Dθ, motion=MotionList(tr, rt))
+        obj2 = Phantom(name=name, x=x, y=y, z=z, ρ=ρ, T1=T1, T2=T2, T2s=T2s, Δw=Δw, Dλ1=Dλ1, Dλ2=Dλ2, Dθ=Dθ, motion=MotionList(tr, rt))
         @test obj1 == obj2
         obj2.x .+= 1e-10
         @test obj1 ≈ obj2
     end
     @testset "Size and Length" begin
-        obj1 = Phantom(name=name, x=x, y=y, z=z, ρ=ρ, T1=T1, T2=T2, T2s=T2s, Δw=Δw, Dλ1=Dλ1, Dλ2=Dλ2, Dθ=Dθ, motion=MotionList(translate, rotate))
+        obj1 = Phantom(name=name, x=x, y=y, z=z, ρ=ρ, T1=T1, T2=T2, T2s=T2s, Δw=Δw, Dλ1=Dλ1, Dλ2=Dλ2, Dθ=Dθ, motion=MotionList(tr, rt))
         @test size(obj1) == size(ρ)
         @test length(obj1) == length(ρ)
     end
     @testset "Subset" begin 
-        motion = MotionList(translate, rotate)
+        motion = MotionList(tr, rt)
         obj1 = Phantom(name, x, y, z, ρ, T1, T2, T2s, Δw, Dλ1, Dλ2, Dθ, motion)
         rng = 1:2:5
         obj2 = Phantom(
@@ -646,8 +704,8 @@ end
         # BitVector range
         obj3 = copy(obj1)
         rng = obj1.x .> 0
-        obj1.motion = Translate(5e-4, 6e-4, 7e-4, TimeRange(0.0, 1.0), SpinRange(rng))
-        obj3.motion = Translate(5e-4, 6e-4, 7e-4, TimeRange(0.0, 1.0), SpinRange(1:length(obj3)))
+        obj1.motion = translate(5e-4, 6e-4, 7e-4, TimeRange(0.0, 1.0), SpinRange(rng))
+        obj3.motion = translate(5e-4, 6e-4, 7e-4, TimeRange(0.0, 1.0), SpinRange(1:length(obj3)))
         @test obj1[rng] == obj3[rng]
         @test obj1[rng].motion == obj3.motion[rng]
     end
@@ -666,49 +724,49 @@ end
         # NoMotion + NoMotion
         @test obj1 + obj2 == oba
         # NoMotion + MotionList
-        obj2.motion = MotionList(translate, rotate)
+        obj2.motion = MotionList(tr, rt)
         oba.motion = vcat(obj1.motion, obj2.motion, length(obj1), length(obj2))
         @test obj1 + obj2 == oba
         # MotionList + NoMotion
-        obj1.motion = MotionList(translate, rotate)
+        obj1.motion = MotionList(tr, rt)
         obj2.motion = NoMotion()
         oba.motion = vcat(obj1.motion, obj2.motion, length(obj1), length(obj2))
         @test obj1 + obj2 == oba
         # NoMotion + Motion
         obj1.motion = NoMotion()
-        obj2.motion = translate
+        obj2.motion = tr
         oba.motion = vcat(obj1.motion, obj2.motion, length(obj1), length(obj2))
         @test obj1 + obj2 == oba
         # Motion + NoMotion
-        obj1.motion = translate
+        obj1.motion = tr
         obj2.motion = NoMotion()
         oba.motion = vcat(obj1.motion, obj2.motion, length(obj1), length(obj2))
         @test obj1 + obj2 == oba
         # MotionList + MotionList
-        obj1.motion = MotionList(translate, rotate)
-        obj2.motion = MotionList(translate, rotate)
+        obj1.motion = MotionList(tr, rt)
+        obj2.motion = MotionList(tr, rt)
         oba.motion = vcat(obj1.motion, obj2.motion, length(obj1), length(obj2))
         @test obj1 + obj2 == oba
         # Motion + Motion
-        obj1.motion = translate
-        obj2.motion = rotate
+        obj1.motion = tr
+        obj2.motion = rt
         oba.motion = vcat(obj1.motion, obj2.motion, length(obj1), length(obj2))
         @test obj1 + obj2 == oba
         # Motion + MotionList
-        obj1.motion = translate
-        obj2.motion = MotionList(translate, rotate)
+        obj1.motion = tr
+        obj2.motion = MotionList(tr, rt)
         oba.motion = vcat(obj1.motion, obj2.motion, length(obj1), length(obj2))
         @test obj1 + obj2 == oba
         # MotionList + Motion
-        obj1.motion = MotionList(translate, rotate)
-        obj2.motion = translate
+        obj1.motion = MotionList(tr, rt)
+        obj2.motion = tr
         oba.motion = vcat(obj1.motion, obj2.motion, length(obj1), length(obj2))
         @test obj1 + obj2 == oba
     end 
     @testset "Scalar multiplication" begin
-        obj1 = Phantom(name=name, x=x, y=y, z=z, ρ=ρ, T1=T1, T2=T2, T2s=T2s, Δw=Δw, Dλ1=Dλ1, Dλ2=Dλ2, Dθ=Dθ, motion=MotionList(translate, rotate))
+        obj1 = Phantom(name=name, x=x, y=y, z=z, ρ=ρ, T1=T1, T2=T2, T2s=T2s, Δw=Δw, Dλ1=Dλ1, Dλ2=Dλ2, Dθ=Dθ, motion=MotionList(tr, rt))
         c = 7
-        obc = Phantom(name=name, x=x, y=y, z=z, ρ=c*ρ, T1=T1, T2=T2, T2s=T2s, Δw=Δw, Dλ1=Dλ1, Dλ2=Dλ2, Dθ=Dθ, motion=MotionList(translate, rotate))
+        obc = Phantom(name=name, x=x, y=y, z=z, ρ=c*ρ, T1=T1, T2=T2, T2s=T2s, Δw=Δw, Dλ1=Dλ1, Dλ2=Dλ2, Dθ=Dθ, motion=MotionList(tr, rt))
         @test c * obj1 == obc
     end
     @testset "Brain Phantom 2D" begin

@@ -1,7 +1,7 @@
 name = "KomaMRIBase"
 uuid = "d0bc0b20-b151-4d03-b2a4-6ca51751cb9c"
 authors = ["Carlos Castillo Passi <cncastillo@uc.cl>"]
-version = "0.9.0"
+version = "0.9.6"
 
 [deps]
 Interpolations = "a98d9a8b-a2ab-59e6-89dd-64a1c18fca59"
@@ -12,7 +12,7 @@ Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
 Waveforms = "cb13b1c6-351e-5134-b3ad-d6a530956a82"
 
 [compat]
-Interpolations = "0.13, 0.14, 0.15"
+Interpolations = "0.13, 0.14, 0.15, 0.16"
 MAT = "0.10"
 MRIBase = "0.4"
 Parameters = "0.12"
